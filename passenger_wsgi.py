@@ -4,8 +4,8 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from a2wsgi import ASGIMiddleware, WSGIMiddleware
+from a2wsgi import ASGIMiddleware
 from main import app
 
-# FastAPI to WSGI
-application = WSGIMiddleware(app)
+# FastAPI (ASGI) to WSGI adapter for Passenger
+application = ASGIMiddleware(app)

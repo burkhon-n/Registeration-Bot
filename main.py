@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(title="Registration Bot", version="1.0.0")
 
+@app.on_event("startup")
 async def on_startup():
     """Initialize database and set webhook"""
     try:

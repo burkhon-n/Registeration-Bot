@@ -2,10 +2,17 @@
 
 ## 1. ✅ Fixed Issues
 
+### WSGI Adapter Fix (CRITICAL)
+- ✅ Fixed `passenger_wsgi.py` to use `ASGIMiddleware` instead of `WSGIMiddleware`
+- ✅ FastAPI is ASGI, not WSGI - this was causing the TypeError
+
 ### Database Driver Update
 - ✅ Updated `database.py` to use `psycopg` (version 3) instead of `psycopg2`
 - ✅ Automatic URL conversion from `postgresql://` to `postgresql+psycopg://`
 - ✅ This works with the `psycopg[binary]==3.2.10` in requirements.txt
+
+### Startup Event Registration
+- ✅ Fixed `main.py` to properly register `@app.on_event("startup")` decorator
 
 ### Dependency Updates
 - ✅ Updated `aiohttp` from `3.9.1` to `>=3.10.0` (fixes Python 3.13 compatibility)
