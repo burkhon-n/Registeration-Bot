@@ -13,9 +13,7 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(title="Registration Bot", version="1.0.0")
 
-# Initialize database on startup
-@app.on_event("startup")
-async def startup_event():
+async def on_startup():
     """Initialize database and set webhook"""
     try:
         # Initialize database
@@ -85,3 +83,6 @@ async def webhook_info():
     except Exception as e:
         logger.error(f"Error getting webhook info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+if __name__ == "__main__":
+    asyncio.run(on_startup())
