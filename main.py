@@ -53,17 +53,12 @@ async def root():
 async def webhook(request: Request):
     """Handle incoming Telegram updates"""
     try:
-        # Get the update from Telegram
         json_data = await request.json()
-        logger.info(f"Received update: {json_data}")
         update = types.Update.de_json(json_data)
-        
-        # Process the update asynchronously
         await bot.process_new_updates([update])
-        
         return {"ok": True}
     except Exception as e:
-        logger.error(f"Error processing webhook: {e}", exc_info=True)
+        logger.error(f"Error processing webhook: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Health check endpoint

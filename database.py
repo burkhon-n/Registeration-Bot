@@ -15,9 +15,9 @@ DATABASE_URL = os.getenv(
 # Create SQLAlchemy engine
 engine = create_engine(
     DATABASE_URL,
-    echo=True,  # Set to False in production
-    pool_size=10,
-    max_overflow=20
+    echo=False,
+    pool_size=5,
+    max_overflow=10
 )
 
 # Create SessionLocal class
