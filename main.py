@@ -5,7 +5,7 @@ import config
 from database import init_db
 from bot import bot
 import logging
-import atexit
+import weakref
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,13 +22,17 @@ def initialize_app():
     global _initialized
     if not _initialized:
         try:
-            # Initialize database
-            init_db()
-            logger.info("Database initialized successfully")
+            # Initialize database (but don't fail if DB is not accessible yet)
+            try:
+                init_db()
+                logger.info("Database initialized successfully")
+            except Exception as db_error:
+                logger.warning(f"Database initialization deferred: {db_error}")
+                logger.info("Database will be initialized on first request")
             _initialized = True
         except Exception as e:
             logger.error(f"Error during initialization: {e}")
-            raise
+            # Don't raise - allow app to start even if DB is not ready
 
 async def setup_webhook():
     """Setup Telegram webhook - called lazily on first request"""
@@ -40,30 +44,36 @@ async def setup_webhook():
     except Exception as e:
         logger.error(f"Error setting webhook: {e}")
 
-def cleanup_app():
-    """Cleanup resources - registered with atexit"""
-    try:
-        # Close bot session synchronously
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(bot.close_session())
-        loop.close()
-        logger.info("Bot session closed successfully")
-    except Exception as e:
-        logger.error(f"Error during cleanup: {e}")
-
-# Register cleanup handler
-atexit.register(cleanup_app)
-
 # Track if webhook has been set
 _webhook_set = False
+_db_initialized = False
+
+async def ensure_db_initialized():
+    """Ensure database is initialized (lazy initialization)"""
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            init_db()
+            logger.info("Database initialized (lazy)")
+            _db_initialized = True
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}")
+            raise
 
 # Root endpoint
 @app.get("/")
 async def root():
     """Root endpoint - simple status check and lazy webhook setup"""
     global _webhook_set
+    
+    # Ensure database is initialized
+    if not _db_initialized:
+        try:
+            await ensure_db_initialized()
+        except:
+            pass  # Don't block if DB init fails
+    
+    # Setup webhook on first request
     if not _webhook_set:
         await setup_webhook()
         _webhook_set = True
@@ -71,7 +81,8 @@ async def root():
     return {
         "status": "running",
         "message": "Registration Bot Webhook Server",
-        "webhook_path": config.WEBHOOK_PATH
+        "webhook_path": config.WEBHOOK_PATH,
+        "database_ready": _db_initialized
     }
 
 # Webhook endpoint for Telegram
@@ -79,6 +90,10 @@ async def root():
 async def webhook(request: Request):
     """Handle incoming Telegram updates"""
     try:
+        # Ensure database is ready
+        if not _db_initialized:
+            await ensure_db_initialized()
+        
         json_data = await request.json()
         update = types.Update.de_json(json_data)
         await bot.process_new_updates([update])
