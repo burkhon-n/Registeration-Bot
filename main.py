@@ -5,11 +5,16 @@ import config
 from database import init_db
 from bot import bot
 import logging
-import weakref
+import warnings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Suppress aiohttp ResourceWarning for unclosed sessions in WSGI environment
+# This is expected behavior when running under Passenger/WSGI
+warnings.filterwarnings("ignore", message=".*Unclosed client session.*", category=ResourceWarning)
+warnings.filterwarnings("ignore", message=".*Unclosed connector.*", category=ResourceWarning)
 
 # Initialize FastAPI app
 app = FastAPI(title="Registration Bot", version="1.0.0")
