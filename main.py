@@ -29,18 +29,13 @@ async def on_startup():
     except Exception as e:
         logger.error(f"Error during startup: {e}")
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Remove webhook on shutdown"""
-    try:
-        await bot.remove_webhook()
-        logger.info("Webhook removed")
-    except Exception as e:
-        logger.error(f"Error during shutdown: {e}")
-
 # Root endpoint
 @app.get("/")
 async def root():
+    # Set webhook info in response
+    await bot.delete_webhook()
+    await bot.set_webhook(url=f"{config.WEBHOOK_URL}{config.WEBHOOK_PATH}")
+    await bot.get_webhook_info()  # Ensure webhook is set
     return {
         "status": "running",
         "message": "Registration Bot Webhook Server",
