@@ -17,6 +17,8 @@ HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", 8000))
 
 # Database Configuration
+# Note: The database.py will automatically convert postgresql:// to postgresql+psycopg://
+# to use psycopg3 instead of the older psycopg2
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://username:password@localhost:5432/registration_bot"

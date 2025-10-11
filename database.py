@@ -12,6 +12,12 @@ DATABASE_URL = os.getenv(
     "postgresql://username:password@localhost:5432/registration_bot"
 )
 
+# Convert postgresql:// to postgresql+psycopg:// for psycopg3 compatibility
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+elif DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+
 # Create SQLAlchemy engine
 engine = create_engine(
     DATABASE_URL,
