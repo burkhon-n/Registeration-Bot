@@ -548,6 +548,9 @@ async def process_confirmation(message: types.Message):
 @bot.message_handler(state=RegistrationStates.project_type)
 async def process_project_type(message: types.Message):
     """Process project type selection"""
+    user_id = message.from_user.id
+    logger.info(f"Processing project type selection from user {user_id}: '{message.text}'")
+    
     # Find selected project type
     selected_type = None
     for project_key, project_info in config.PROJECT_TYPES.items():
@@ -556,8 +559,11 @@ async def process_project_type(message: types.Message):
             break
     
     if not selected_type:
+        logger.warning(f"User {user_id} selected invalid project type: '{message.text}'")
         await bot.send_message(message.from_user.id, "❗️ Iltimos, tugmalardan birini tanlang!")
         return
+    
+    logger.info(f"User {user_id} selected project type: {selected_type}")
     
     async with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data['project_type'] = selected_type
@@ -572,7 +578,13 @@ async def process_project_type(message: types.Message):
         f"Faylni shu yerga yuboring.",
         reply_markup=markup
     )
+    
+    # Set state to project_file
     await bot.set_state(message.from_user.id, RegistrationStates.project_file, message.chat.id)
+    
+    # Verify state was set
+    current_state = await bot.get_state(message.from_user.id, message.chat.id)
+    logger.info(f"State set for user {user_id}: '{current_state}' (expected: '{RegistrationStates.project_file.name}')")
 
 @bot.message_handler(state=RegistrationStates.project_file, content_types=['document', 'photo', 'audio', 'video', 'voice'])
 async def process_project_file(message: types.Message):
@@ -728,6 +740,9 @@ async def go_home(message: types.Message):
 @bot.message_handler(func=lambda message: message.text in ["➕ Yana loyiha yuborish", "➕ Loyiha yuborish"])
 async def submit_another_project(message: types.Message):
     """Allow user to submit another project"""
+    user_id = message.from_user.id
+    logger.info(f"User {user_id} clicked submit project button: '{message.text}'")
+    
     # Ask for project type
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     for project_key, project_info in config.PROJECT_TYPES.items():
@@ -739,6 +754,7 @@ async def submit_another_project(message: types.Message):
         reply_markup=markup
     )
     await bot.set_state(message.from_user.id, RegistrationStates.project_type, message.chat.id)
+    logger.info(f"State set to project_type for user {user_id}")
 
 @bot.message_handler(func=lambda message: message.text == "✏️ Ma'lumotlarni tahrirlash")
 async def edit_personal_info(message: types.Message):
@@ -817,14 +833,22 @@ async def handle_contact(message: types.Message):
 async def handle_file_upload(message: types.Message):
     """Handle file uploads"""
     current_state = await bot.get_state(message.from_user.id, message.chat.id)
-    logger.info(f"File received from user {message.from_user.id} in state {current_state}, content_type: {message.content_type}")
+    logger.info(f"File received from user {message.from_user.id} in state '{current_state}', content_type: {message.content_type}")
+    logger.info(f"Expected state: '{RegistrationStates.project_file.name}'")
+    logger.info(f"State match: {current_state == RegistrationStates.project_file.name}")
     
     if current_state == RegistrationStates.project_file.name:
+        logger.info(f"Routing to process_project_file for user {message.from_user.id}")
         await process_project_file(message)
     else:
+        logger.warning(f"User {message.from_user.id} sent file without being in project_file state. Current state: {current_state}")
         await bot.send_message(
             message.from_user.id,
-            "❌ Iltimos, avval loyiha turini tanlang."
+            f"❌ Iltimos, avval loyiha turini tanlang.\n\n"
+            f"Qadam:\n"
+            f"1️⃣ \"➕ Loyiha yuborish\" tugmasini bosing\n"
+            f"2️⃣ Loyiha turini tanlang\n"
+            f"3️⃣ Faylni yuboring"
         )
 
 @bot.message_handler(func=lambda message: message.text == "📊 Ma'lumotlarni yuklab olish (Admin)")
