@@ -1,12 +1,25 @@
+import warnings
+import sys
+import os
+
+# Suppress warnings BEFORE any other imports
+# This prevents aiohttp from logging unclosed session warnings
+warnings.filterwarnings("ignore", category=ResourceWarning)
+warnings.filterwarnings("ignore", message=".*Unclosed client session.*")
+warnings.filterwarnings("ignore", message=".*Unclosed connector.*")
+warnings.filterwarnings("ignore", message=".*ssl.*", category=ResourceWarning)
+warnings.filterwarnings("ignore", message=".*aiohttp.*", category=ResourceWarning)
+
+# Also suppress at the asyncio level
+import asyncio
+asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+
 from fastapi import FastAPI, Request, HTTPException
 from telebot import types
-import asyncio
 import config
 from database import init_db
 from bot import bot
 import logging
-import warnings
-import os
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
@@ -47,11 +60,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
-# Suppress aiohttp ResourceWarning for unclosed sessions in WSGI environment
-# This is expected behavior when running under Passenger/WSGI
-warnings.filterwarnings("ignore", message=".*Unclosed client session.*", category=ResourceWarning)
-warnings.filterwarnings("ignore", message=".*Unclosed connector.*", category=ResourceWarning)
 
 # Log startup
 logger.info("=" * 60)
