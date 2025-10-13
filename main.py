@@ -6,15 +6,55 @@ from database import init_db
 from bot import bot
 import logging
 import warnings
+import os
+from logging.handlers import RotatingFileHandler
+from datetime import datetime
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Create logs directory if it doesn't exist
+log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+
+# Configure logging with both file and console output
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        # Console handler
+        logging.StreamHandler(),
+        # File handler with rotation (10MB max, keep 5 backups)
+        RotatingFileHandler(
+            os.path.join(log_dir, 'app.log'),
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        ),
+        # Error-only log file
+        RotatingFileHandler(
+            os.path.join(log_dir, 'error.log'),
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+    ]
+)
+
+# Set error handler to only log errors
+error_handler = logging.getLogger().handlers[2]
+error_handler.setLevel(logging.ERROR)
+
 logger = logging.getLogger(__name__)
 
 # Suppress aiohttp ResourceWarning for unclosed sessions in WSGI environment
 # This is expected behavior when running under Passenger/WSGI
 warnings.filterwarnings("ignore", message=".*Unclosed client session.*", category=ResourceWarning)
 warnings.filterwarnings("ignore", message=".*Unclosed connector.*", category=ResourceWarning)
+
+# Log startup
+logger.info("=" * 60)
+logger.info("Registration Bot Starting")
+logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+logger.info(f"Log directory: {log_dir}")
+logger.info("=" * 60)
 
 # Initialize FastAPI app
 app = FastAPI(title="Registration Bot", version="1.0.0")
@@ -71,24 +111,30 @@ async def root():
     """Root endpoint - simple status check and lazy webhook setup"""
     global _webhook_set
     
+    logger.info("Root endpoint accessed")
+    
     # Ensure database is initialized
     if not _db_initialized:
         try:
             await ensure_db_initialized()
-        except:
+        except Exception as e:
+            logger.warning(f"Database initialization failed on root access: {e}")
             pass  # Don't block if DB init fails
     
     # Setup webhook on first request
     if not _webhook_set:
+        logger.info("Setting up webhook on first request")
         await setup_webhook()
         _webhook_set = True
     
-    return {
+    response = {
         "status": "running",
         "message": "Registration Bot Webhook Server",
         "webhook_path": config.WEBHOOK_PATH,
         "database_ready": _db_initialized
     }
+    logger.info(f"Root endpoint response: {response}")
+    return response
 
 # Webhook endpoint for Telegram
 @app.post(config.WEBHOOK_PATH)
@@ -97,28 +143,43 @@ async def webhook(request: Request):
     try:
         # Ensure database is ready
         if not _db_initialized:
+            logger.info("Initializing database on webhook request")
             await ensure_db_initialized()
         
         json_data = await request.json()
+        logger.info(f"Received webhook update: update_id={json_data.get('update_id')}")
+        
+        # Log message details if present
+        if 'message' in json_data:
+            msg = json_data['message']
+            user_id = msg.get('from', {}).get('id', 'unknown')
+            chat_id = msg.get('chat', {}).get('id', 'unknown')
+            text = msg.get('text', msg.get('caption', '<no text>'))
+            logger.info(f"Message from user {user_id} in chat {chat_id}: {text[:50]}")
+        
         update = types.Update.de_json(json_data)
         await bot.process_new_updates([update])
+        logger.info("Webhook processed successfully")
         return {"ok": True}
     except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
+        logger.error(f"Error processing webhook: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 # Health check endpoint
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy"}
+    logger.info("Health check endpoint accessed")
+    return {"status": "healthy", "message": "Bot is running"}
 
 # Webhook info endpoint
 @app.get("/webhook-info")
 async def webhook_info():
-    """Get current webhook information"""
+    """Get webhook information"""
     try:
+        logger.info("Webhook info endpoint accessed")
         info = await bot.get_webhook_info()
+        logger.info(f"Webhook status: url={info.url}, pending={info.pending_update_count}")
         return {
             "url": info.url,
             "has_custom_certificate": info.has_custom_certificate,
@@ -126,8 +187,7 @@ async def webhook_info():
             "last_error_date": info.last_error_date,
             "last_error_message": info.last_error_message,
             "max_connections": info.max_connections,
-            "allowed_updates": info.allowed_updates
         }
     except Exception as e:
-        logger.error(f"Error getting webhook info: {e}")
+        logger.error(f"Error getting webhook info: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

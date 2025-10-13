@@ -66,10 +66,15 @@ def load_regions():
 @bot.message_handler(commands=['start'])
 async def welcome_handler(message: types.Message):
     """Handle /start command"""
+    user_id = message.from_user.id
+    username = message.from_user.username or "no_username"
+    logger.info(f"User {user_id} (@{username}) started the bot with /start command")
+    
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     
     # Check if user is admin
     if message.from_user.id in config.ADMIN_IDS:
+        logger.info(f"Admin access granted for user {user_id}")
         markup.add(types.KeyboardButton("👤 Ro'yxatdan o'tish"))
         markup.add(types.KeyboardButton("📊 Ma'lumotlarni yuklab olish (Admin)"))
         admin_note = "\n\n🔐 <b>Admin panel mavjud!</b>"
@@ -83,15 +88,20 @@ async def welcome_handler(message: types.Message):
         parse_mode='HTML',
         reply_markup=markup
     )
+    logger.info(f"Welcome message sent to user {user_id}")
 
 @bot.message_handler(func=lambda message: message.text == "👤 Ro'yxatdan o'tish")
 async def start_registration(message: types.Message):
     """Start registration process"""
+    user_id = message.from_user.id
+    logger.info(f"User {user_id} clicked registration button")
+    
     # Check if user already exists
     db = SessionLocal()
     try:
         existing_user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if existing_user:
+            logger.info(f"User {user_id} already registered, showing options")
             # User already registered, show options
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
             markup.add(
@@ -111,6 +121,7 @@ async def start_registration(message: types.Message):
         db.close()
     
     # Ask for full name
+    logger.info(f"Starting new registration flow for user {user_id}")
     markup = types.ReplyKeyboardRemove()
     await bot.send_message(
         message.from_user.id,
@@ -382,7 +393,8 @@ Ma'lumotlar to'g'rimi?
 @bot.message_handler(state=RegistrationStates.confirmation)
 async def process_confirmation(message: types.Message):
     """Process confirmation response"""
-    logger.info(f"Confirmation handler received: '{message.text}' from user {message.from_user.id}")
+    user_id = message.from_user.id
+    logger.info(f"Confirmation handler received: '{message.text}' from user {user_id}")
     
     if message.text == "✅ Ha, to'g'ri":
         # Check if user already exists (editing existing data)
@@ -391,6 +403,7 @@ async def process_confirmation(message: types.Message):
             existing_user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
             
             if existing_user:
+                logger.info(f"Updating existing user data for user {user_id}")
                 # Update existing user data
                 async with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
                     # Update address
@@ -408,6 +421,7 @@ async def process_confirmation(message: types.Message):
                     existing_user.phone_number = data['phone_number']
                     
                     db.commit()
+                    logger.info(f"User {user_id} data updated successfully")
                     
                     # Show success and options
                     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -563,7 +577,9 @@ async def process_project_type(message: types.Message):
 @bot.message_handler(state=RegistrationStates.project_file, content_types=['document', 'photo', 'audio', 'video', 'voice'])
 async def process_project_file(message: types.Message):
     """Process project file submission"""
-    logger.info(f"Received project file from user {message.from_user.id}")
+    user_id = message.from_user.id
+    content_type = message.content_type
+    logger.info(f"Received project file ({content_type}) from user {user_id}")
     
     async with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         project_type = data.get('project_type')
@@ -666,7 +682,7 @@ async def process_project_file(message: types.Message):
                 db.add(project)
                 db.commit()
                 
-                logger.info(f"Project saved successfully for user {message.from_user.id}")
+                logger.info(f"Project saved successfully for user {user_id}: type={project_type}, url={project_url}")
                 
                 # Success message with option to submit another project
                 markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -814,14 +830,17 @@ async def handle_file_upload(message: types.Message):
 @bot.message_handler(func=lambda message: message.text == "📊 Ma'lumotlarni yuklab olish (Admin)")
 async def export_data_admin(message: types.Message):
     """Export all data to Excel (Admin only)"""
+    user_id = message.from_user.id
     # Check if user is admin
-    if message.from_user.id not in config.ADMIN_IDS:
+    if user_id not in config.ADMIN_IDS:
+        logger.warning(f"Non-admin user {user_id} attempted to access admin export function")
         await bot.send_message(
             message.from_user.id,
             "❌ Bu funksiya faqat adminlar uchun!"
         )
         return
     
+    logger.info(f"Admin {user_id} initiated data export")
     await bot.send_message(
         message.from_user.id,
         "⏳ Ma'lumotlar tayyorlanmoqda, iltimos kuting..."
@@ -1142,7 +1161,7 @@ async def export_data_admin(message: types.Message):
         # Delete temporary file
         os.unlink(temp_file.name)
         
-        logger.info(f"Admin {message.from_user.id} exported data successfully")
+        logger.info(f"Admin {user_id} exported data successfully: {total_users} users, {total_projects} projects")
         
     except Exception as e:
         logger.error(f"Error exporting data: {e}", exc_info=True)

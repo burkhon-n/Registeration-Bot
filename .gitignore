@@ -141,6 +141,7 @@ cython_debug/
 bot.log
 bot_output.log
 nohup.out
+logs/
 
 # Temporary Excel files
 ~$*.xlsx
