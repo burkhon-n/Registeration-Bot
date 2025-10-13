@@ -90,6 +90,137 @@ async def welcome_handler(message: types.Message):
     )
     logger.info(f"Welcome message sent to user {user_id}")
 
+@bot.message_handler(commands=['clear_results'])
+async def clear_results_handler(message: types.Message):
+    """Clear all database results (Admin only)"""
+    user_id = message.from_user.id
+    
+    # Check if user is admin
+    if user_id not in config.ADMIN_IDS:
+        logger.warning(f"Non-admin user {user_id} attempted to clear database")
+        await bot.send_message(
+            message.from_user.id,
+            "❌ Bu buyruq faqat adminlar uchun!"
+        )
+        return
+    
+    logger.warning(f"Admin {user_id} initiated database clear request")
+    
+    # Ask for confirmation
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        types.KeyboardButton("✅ Ha, barcha ma'lumotlarni o'chirish"),
+        types.KeyboardButton("❌ Yo'q, bekor qilish")
+    )
+    
+    await bot.send_message(
+        message.from_user.id,
+        "⚠️ <b>OGOHLANTIRISH!</b>\n\n"
+        "Siz barcha ma'lumotlarni o'chirmoqchisiz:\n"
+        "• Barcha foydalanuvchilar\n"
+        "• Barcha manzillar\n"
+        "• Barcha loyihalar\n\n"
+        "Bu amalni qaytarib bo'lmaydi!\n\n"
+        "Davom etishni xohlaysizmi?",
+        parse_mode='HTML',
+        reply_markup=markup
+    )
+
+@bot.message_handler(func=lambda message: message.text == "✅ Ha, barcha ma'lumotlarni o'chirish")
+async def confirm_clear_database(message: types.Message):
+    """Confirm and clear database (Admin only)"""
+    user_id = message.from_user.id
+    
+    # Check if user is admin
+    if user_id not in config.ADMIN_IDS:
+        logger.warning(f"Non-admin user {user_id} attempted to confirm database clear")
+        await bot.send_message(
+            message.from_user.id,
+            "❌ Bu buyruq faqat adminlar uchun!"
+        )
+        return
+    
+    logger.critical(f"Admin {user_id} confirmed database clear - DELETING ALL DATA")
+    
+    await bot.send_message(
+        message.from_user.id,
+        "⏳ Ma'lumotlar o'chirilmoqda...",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+    
+    db = SessionLocal()
+    try:
+        # Count records before deletion
+        users_count = db.query(User).count()
+        addresses_count = db.query(Address).count()
+        projects_count = db.query(Project).count()
+        
+        logger.warning(f"Deleting {users_count} users, {addresses_count} addresses, {projects_count} projects")
+        
+        # Delete all records (order matters due to foreign keys)
+        db.query(Project).delete()
+        db.query(User).delete()
+        db.query(Address).delete()
+        
+        db.commit()
+        
+        logger.critical(f"Database cleared successfully by admin {user_id}: {users_count} users, {addresses_count} addresses, {projects_count} projects deleted")
+        
+        # Show success message
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        if user_id in config.ADMIN_IDS:
+            markup.add(types.KeyboardButton("👤 Ro'yxatdan o'tish"))
+            markup.add(types.KeyboardButton("📊 Ma'lumotlarni yuklab olish (Admin)"))
+        
+        await bot.send_message(
+            message.from_user.id,
+            f"✅ <b>Barcha ma'lumotlar o'chirildi!</b>\n\n"
+            f"📊 O'chirilgan ma'lumotlar:\n"
+            f"• Foydalanuvchilar: {users_count}\n"
+            f"• Manzillar: {addresses_count}\n"
+            f"• Loyihalar: {projects_count}\n\n"
+            f"Database endi bo'sh.",
+            parse_mode='HTML',
+            reply_markup=markup
+        )
+        
+    except Exception as e:
+        logger.error(f"Error clearing database: {e}", exc_info=True)
+        db.rollback()
+        
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        if user_id in config.ADMIN_IDS:
+            markup.add(types.KeyboardButton("👤 Ro'yxatdan o'tish"))
+            markup.add(types.KeyboardButton("📊 Ma'lumotlarni yuklab olish (Admin)"))
+        
+        await bot.send_message(
+            message.from_user.id,
+            f"❌ Xatolik yuz berdi: {str(e)}\n\n"
+            f"Iltimos, qaytadan urinib ko'ring.",
+            reply_markup=markup
+        )
+    finally:
+        db.close()
+
+@bot.message_handler(func=lambda message: message.text == "❌ Yo'q, bekor qilish")
+async def cancel_clear_database(message: types.Message):
+    """Cancel database clear operation"""
+    user_id = message.from_user.id
+    logger.info(f"Admin {user_id} cancelled database clear")
+    
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    if user_id in config.ADMIN_IDS:
+        markup.add(types.KeyboardButton("👤 Ro'yxatdan o'tish"))
+        markup.add(types.KeyboardButton("📊 Ma'lumotlarni yuklab olish (Admin)"))
+    else:
+        markup.add(types.KeyboardButton("👤 Ro'yxatdan o'tish"))
+    
+    await bot.send_message(
+        message.from_user.id,
+        "❌ Bekor qilindi. Hech qanday ma'lumot o'chirilmadi.",
+        reply_markup=markup
+    )
+
 @bot.message_handler(func=lambda message: message.text == "👤 Ro'yxatdan o'tish")
 async def start_registration(message: types.Message):
     """Start registration process"""
