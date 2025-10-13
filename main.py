@@ -14,33 +14,37 @@ from datetime import datetime
 log_dir = os.path.join(os.path.dirname(__file__), 'logs')
 os.makedirs(log_dir, exist_ok=True)
 
-# Configure logging with both file and console output
+# Create handlers
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+app_file_handler = RotatingFileHandler(
+    os.path.join(log_dir, 'app.log'),
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=5,
+    encoding='utf-8'
+)
+app_file_handler.setLevel(logging.INFO)
+
+error_file_handler = RotatingFileHandler(
+    os.path.join(log_dir, 'error.log'),
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=5,
+    encoding='utf-8'
+)
+error_file_handler.setLevel(logging.ERROR)
+
+# Create formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
+app_file_handler.setFormatter(formatter)
+error_file_handler.setFormatter(formatter)
+
+# Configure root logger
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        # Console handler
-        logging.StreamHandler(),
-        # File handler with rotation (10MB max, keep 5 backups)
-        RotatingFileHandler(
-            os.path.join(log_dir, 'app.log'),
-            maxBytes=10*1024*1024,  # 10MB
-            backupCount=5,
-            encoding='utf-8'
-        ),
-        # Error-only log file
-        RotatingFileHandler(
-            os.path.join(log_dir, 'error.log'),
-            maxBytes=10*1024*1024,  # 10MB
-            backupCount=5,
-            encoding='utf-8'
-        )
-    ]
+    handlers=[console_handler, app_file_handler, error_file_handler]
 )
-
-# Set error handler to only log errors
-error_handler = logging.getLogger().handlers[2]
-error_handler.setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 
