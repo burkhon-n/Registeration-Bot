@@ -18,8 +18,38 @@ import tempfile
 
 logger = logging.getLogger(__name__)
 
-# Initialize bot with state storage
-state_storage = StateMemoryStorage()
+# Initialize bot with configurable state storage
+storage_backend = os.getenv('STATE_STORAGE', 'pickle').lower()
+
+# Try to import optional storage backends (may not be available in all installs)
+try:
+    from telebot.asyncio_storage import StatePickleStorage, StateRedisStorage  # type: ignore
+except Exception:
+    StatePickleStorage = None
+    StateRedisStorage = None
+
+state_storage = None
+if storage_backend == 'redis' and StateRedisStorage is not None:
+    try:
+        # Accept REDIS URL in env or default localhost
+        redis_url = os.getenv('STATE_REDIS_URL', 'redis://localhost:6379/0')
+        state_storage = StateRedisStorage(redis_url)
+    except Exception as e:
+        logger.warning(f"Failed to initialize StateRedisStorage: {e}. Falling back.")
+
+if state_storage is None and storage_backend == 'pickle' and StatePickleStorage is not None:
+    try:
+        state_file = os.path.join(os.path.dirname(__file__), 'bot_states.pkl')
+        state_storage = StatePickleStorage(file_path=state_file)
+    except Exception as e:
+        logger.warning(f"Failed to initialize StatePickleStorage: {e}. Falling back.")
+
+if state_storage is None:
+    # Final fallback to in-memory with a warning
+    logger.warning('Using in-memory state storage. States will be lost on worker restart.\n'
+                   'To persist states set STATE_STORAGE=pickle (or redis if available)')
+    state_storage = StateMemoryStorage()
+
 bot = AsyncTeleBot(config.TOKEN, state_storage=state_storage)
 
 # Define states for registration flow
