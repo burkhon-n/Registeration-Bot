@@ -5,14 +5,15 @@ The bot supports configurable state storage backends to make registration flows 
 How to configure
 
 - Default: pickle file storage
+
   - Set in environment: STATE_STORAGE=pickle
   - Optional: STATE_PICKLE_PATH to override file path. Defaults to `bot_states.pkl` next to `bot.py`.
-
 - Redis (recommended for production with multiple workers)
+
   - Set in environment: STATE_STORAGE=redis
   - Provide Redis URL: STATE_REDIS_URL=redis://user:pass@host:6379/0
-
 - Fallback: in-memory (StateMemoryStorage)
+
   - If neither pickle nor redis storage is available or initialization fails, the bot falls back to in-memory storage and logs a warning. In-memory storage loses all states when a worker restarts.
 
 Notes
@@ -23,7 +24,7 @@ Notes
 
 Example
 
-Export environment variables (bash/zsh):
+1. Export environment variables (bash/zsh):
 
 ```bash
 export STATE_STORAGE=redis

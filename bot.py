@@ -84,6 +84,9 @@ Bag'rikenglik, do'stlik va birlik g'oyalarini ifodalovchi ijodingizni bizga yubo
 
 Ro'yxatdan o'tish uchun tugmani bosing 👇"""
 
+# Final broadcast (Uzbek) message constant so it's reusable in script and commands
+FINAL_BROADCAST_MESSAGE = "Tanlovimiz o’z nihoyasiga yetdi! Ishtirokingiz uchun tashakkur😊🙏🏻"
+
 # Load regions data
 def load_regions():
     try:
@@ -250,6 +253,77 @@ async def cancel_clear_database(message: types.Message):
         "❌ Bekor qilindi. Hech qanday ma'lumot o'chirilmadi.",
         reply_markup=markup
     )
+
+@bot.message_handler(commands=['broadcast_final'])
+async def broadcast_final_handler(message: types.Message):
+    """Admin-only command to broadcast final competition message to all users."""
+    user_id = message.from_user.id
+    if user_id not in config.ADMIN_IDS:
+        await bot.send_message(user_id, "❌ Bu buyruq faqat adminlar uchun!")
+        return
+
+    # Confirmation step using reply keyboard
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(types.KeyboardButton("✅ Ha, yuborish"), types.KeyboardButton("❌ Bekor qilish"))
+    await bot.send_message(
+        user_id,
+        "📣 Yakuniy xabarni barcha foydalanuvchilarga yuborishni tasdiqlaysizmi?\n\n"
+        f"Matn:\n{FINAL_BROADCAST_MESSAGE}\n\n"
+        "Tasdiqlash uchun 'Ha, yuborish' tugmasini bosing.",
+        reply_markup=markup
+    )
+
+@bot.message_handler(func=lambda m: m.text == "✅ Ha, yuborish")
+async def confirm_broadcast_final(message: types.Message):
+    user_id = message.from_user.id
+    if user_id not in config.ADMIN_IDS:
+        await bot.send_message(user_id, "❌ Bu buyruq faqat adminlar uchun!")
+        return
+    # Remove keyboard while sending
+    await bot.send_message(user_id, "🔌 Yuborish boshlandi...", reply_markup=types.ReplyKeyboardRemove())
+    db = SessionLocal()
+    try:
+        ids = [row[0] for row in db.query(User.telegram_id).all() if row[0] is not None]
+    finally:
+        db.close()
+    # Deduplicate
+    ids = list(dict.fromkeys(ids))
+    total = len(ids)
+    sent = 0
+    failed = 0
+    # Simple sequential send to avoid hitting flood limits quickly
+    import asyncio as _asyncio  # local import to avoid top-level changes
+    for uid in ids:
+        try:
+            await bot.send_message(uid, FINAL_BROADCAST_MESSAGE)
+            sent += 1
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Failed to send final broadcast to {uid}: {e}")
+            failed += 1
+        # Light delay to mitigate rate limits (~16 msg/sec)
+        await _asyncio.sleep(0.06)
+    # Build reply keyboard again
+    end_markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    end_markup.add(types.KeyboardButton("👤 Ro'yxatdan o'tish"))
+    if user_id in config.ADMIN_IDS:
+        end_markup.add(types.KeyboardButton("📊 Ma'lumotlarni yuklab olish (Admin)"))
+    await bot.send_message(
+        user_id,
+        f"✅ Yakunlandi!\nYuborildi: {sent}\nMuvaffaqiyatsiz: {failed}\nJami: {total}",
+        reply_markup=end_markup
+    )
+
+@bot.message_handler(func=lambda m: m.text == "❌ Bekor qilish")
+async def cancel_broadcast_final(message: types.Message):
+    user_id = message.from_user.id
+    if user_id not in config.ADMIN_IDS:
+        await bot.send_message(user_id, "❌ Bu buyruq faqat adminlar uchun!")
+        return
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("👤 Ro'yxatdan o'tish"))
+    if user_id in config.ADMIN_IDS:
+        markup.add(types.KeyboardButton("📊 Ma'lumotlarni yuklab olish (Admin)"))
+    await bot.send_message(user_id, "❌ Bekor qilindi.", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "👤 Ro'yxatdan o'tish")
 async def start_registration(message: types.Message):
